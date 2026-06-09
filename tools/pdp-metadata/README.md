@@ -85,7 +85,7 @@ After generating the metadata files, you can manually upload the `metadata.json`
 
 ```bash
 curl -X POST \
-  'https://admin.da.live/source/{org}/{site}/metadata.json' \
+  'https://admin.da.live/source/git-cts-arman/accs-storefront/metadata.json' \
   --header 'Authorization: Bearer <your-IMS-JWT>' \
   --form 'data=@metadata.json'
 ```

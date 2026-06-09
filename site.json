@@ -1,11 +1,11 @@
 {
   "version": 1,
   "code": {
-    "owner": "{ORG}",
-    "repo": "{REPO}",
+    "owner": "git-cts-arman",
+    "repo": "accs-storefront",
     "source": {
       "type": "github",
-      "url": "https://github.com/{ORG}/{REPO}"
+      "url": "https://github.com/git-cts-arman/accs-storefront"
     }
   },
   "content": {
@@ -16,10 +16,10 @@
   },
   "cdn": {
     "live": {
-      "host": "main--{SITE}--{ORG}.aem.live"
+      "host": "main--accs-storefront--git-cts-arman.aem.live"
     },
     "preview": {
-      "host": "main--{SITE}--{ORG}.aem.page"
+      "host": "main--accs-storefront--git-cts-arman.aem.page"
     }
   },
   "headers": {},
