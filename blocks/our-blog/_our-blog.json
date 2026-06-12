@@ -1,0 +1,104 @@
+{
+  "definitions": [
+    {
+      "title": "Our Blog",
+      "id": "our-blog",
+      "model": "our-blog",
+      "filter": "our-blog",
+      "plugins": {
+        "da": {
+          "rows": 1,
+          "columns": 1
+        }
+      }
+    },
+    {
+      "title": "Our Blog Post",
+      "id": "our-blog-post",
+      "model": "our-blog-post",
+      "plugins": {
+        "da": {
+          "rows": 1,
+          "columns": 4,
+          "fields": [
+            {
+              "name": "image",
+              "selector": "div:nth-child(1)>picture>img[src]"
+            },
+            {
+              "name": "imageAlt",
+              "selector": "div:nth-child(1)>picture>img[alt]"
+            },
+            {
+              "name": "title",
+              "selector": "div:nth-child(2)"
+            },
+            {
+              "name": "date",
+              "selector": "div:nth-child(3)"
+            },
+            {
+              "name": "link",
+              "selector": "div:nth-child(4)>a[href]"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "models": [
+    {
+      "id": "our-blog",
+      "fields": [
+        {
+          "component": "text",
+          "name": "heading",
+          "label": "Section Heading",
+          "valueType": "string"
+        }
+      ]
+    },
+    {
+      "id": "our-blog-post",
+      "fields": [
+        {
+          "component": "reference",
+          "valueType": "string",
+          "name": "image",
+          "label": "Featured Image",
+          "multi": false
+        },
+        {
+          "component": "text",
+          "valueType": "string",
+          "name": "imageAlt",
+          "label": "Image Alt Text"
+        },
+        {
+          "component": "text",
+          "valueType": "string",
+          "name": "title",
+          "label": "Post Title"
+        },
+        {
+          "component": "text",
+          "valueType": "string",
+          "name": "date",
+          "label": "Publication Date (ISO, e.g. 2025-05-10)"
+        },
+        {
+          "component": "aem-content",
+          "valueType": "string",
+          "name": "link",
+          "label": "Post Link"
+        }
+      ]
+    }
+  ],
+  "filters": [
+    {
+      "id": "our-blog",
+      "components": ["our-blog-post"]
+    }
+  ]
+}

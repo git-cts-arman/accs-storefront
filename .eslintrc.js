@@ -34,5 +34,15 @@ module.exports = {
         'import/no-extraneous-dependencies': 'off',
       },
     },
+    {
+      files: ['**/__tests__/**/*.js', '**/*.test.js'],
+      env: {
+        jest: true,
+      },
+      rules: {
+        'import/first': 'off', // allow jest.mock() before imports (hoisted by jest)
+        'import/no-extraneous-dependencies': 'off', // jest/test utils are devDependencies
+      },
+    },
   ],
 };
