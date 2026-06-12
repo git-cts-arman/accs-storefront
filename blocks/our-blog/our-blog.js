@@ -62,15 +62,21 @@ function buildCard(row) {
   // --- Image (AC6) ---
   const figure = document.createElement('div');
   figure.className = 'our-blog__card-image';
+  const picture = imageCell?.querySelector('picture');
   const img = imageCell?.querySelector('img');
-  if (img) {
-    const picture = createOptimizedPicture(
-      img.src,
-      img.getAttribute('alt') || '',
-      false,
-      [{ width: '750' }],
-    );
+  if (picture) {
+    // Reuse the authored <picture> as-is (EDS already produced optimized markup).
     figure.append(picture);
+  } else if (img?.getAttribute('src')) {
+    // Fallback: build an optimized <picture> from a raw <img> with a real src.
+    figure.append(
+      createOptimizedPicture(
+        img.getAttribute('src'),
+        img.getAttribute('alt') || '',
+        false,
+        [{ width: '750' }],
+      ),
+    );
   }
   card.append(figure);
 
