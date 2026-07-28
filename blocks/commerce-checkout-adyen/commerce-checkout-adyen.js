@@ -4,9 +4,11 @@
 // Dropin Tools
 import { events } from '@dropins/tools/event-bus.js';
 import { initReCaptcha } from '@dropins/tools/recaptcha.js';
+import { getConfigValue } from '@dropins/tools/lib/aem/configs.js';
 
 // Order Dropin Modules
 import * as orderApi from '@dropins/storefront-order/api.js';
+import * as checkoutApi from '@dropins/storefront-checkout/api.js';
 
 // Checkout Dropin Libraries
 import {
@@ -90,6 +92,46 @@ function redirectToCartIfEmpty(cartData) {
   }
 }
 
+async function finalizeMagentoOrderAfterAdyen(cartId) {
+  const configuredMethod = (await getConfigValue('adyen-order-placement-method') || '').trim();
+  const fallbackMethods = [
+    configuredMethod,
+    'checkmo',
+    'banktransfer',
+    'banktransferpayment',
+  ].filter(Boolean);
+
+  let methodSet = false;
+  let lastSetMethodError;
+
+  for (const methodCode of fallbackMethods) {
+    try {
+      await checkoutApi.setPaymentMethod({ code: methodCode });
+      methodSet = true;
+      break;
+    } catch (error) {
+      lastSetMethodError = error;
+    }
+  }
+
+  if (!methodSet) {
+    return {
+      ok: false,
+      message: `Payment was authorized, but checkout could not map an order placement method. ${String(lastSetMethodError?.message || '')}`.trim(),
+    };
+  }
+
+  try {
+    await orderApi.placeOrder(cartId);
+    return { ok: true };
+  } catch (error) {
+    return {
+      ok: false,
+      message: `Payment was authorized, but checkout could not create the order. ${String(error?.message || '')}`.trim(),
+    };
+  }
+}
+
 export default async function decorate(block) {
   setMetaTags('Checkout');
   document.title = 'Checkout';
@@ -152,17 +194,25 @@ export default async function decorate(block) {
     await displayOverlaySpinner(loaderRef, $loader);
     try {
       if (isAdyenPaymentCode(code)) {
-          const adyenResult = await startAdyenCheckoutFlow({
+        const adyenResult = await startAdyenCheckoutFlow({
           cartId,
           code,
-          onPaymentComplete: async () => {
-            await orderApi.placeOrder(cartId);
+          onPaymentComplete: async (paymentResult) => {
+            const resultCode = paymentResult?.resultCode;
+            if (resultCode && resultCode !== 'Authorised') {
+              return {
+                ok: false,
+                message: 'Payment did not complete successfully. Please try again.',
+              };
+            }
+
+            return finalizeMagentoOrderAfterAdyen(cartId);
           },
         });
 
-          if (!adyenResult?.ok) {
-            window.alert(adyenResult?.message || 'Unable to initialize Adyen payment. Please try again.');
-          }
+        if (!adyenResult?.ok) {
+          window.alert(adyenResult?.message || 'Unable to initialize Adyen payment. Please try again.');
+        }
 
         return;
       }

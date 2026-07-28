@@ -9,6 +9,7 @@
       "adyen-country-code": "NL",
       "adyen-shopper-locale": "en-US",
       "adyen-environment": "test",
+      "adyen-order-placement-method": "checkmo",
       "headers": {
         "all": {
           "Store": "default"

@@ -66,10 +66,10 @@ const getFactoryFromGlobalSearch = () => {
   const candidates = [
     globalThis.AdyenCheckout,
     globalThis.adyenCheckout,
-    globalThis.AdyenWeb,
+    globalThis.AdyenWeb?.AdyenCheckout,
     window.AdyenCheckout,
     window.adyenCheckout,
-    window.AdyenWeb,
+    window.AdyenWeb?.AdyenCheckout,
   ];
 
   for (const candidate of candidates) {
@@ -96,6 +96,8 @@ const globalDebugSnapshot = () => {
     hasWindowAdyenCheckout: typeof window.AdyenCheckout,
     hasWindowadyenCheckout: typeof window.adyenCheckout,
     hasWindowAdyenWeb: typeof window.AdyenWeb,
+    hasWindowAdyenWebAdyenCheckout: typeof window.AdyenWeb?.AdyenCheckout,
+    hasWindowAdyenWebDropin: typeof window.AdyenWeb?.Dropin,
   };
 
   if (window.AdyenWeb && typeof window.AdyenWeb === 'object') {
@@ -107,6 +109,18 @@ const globalDebugSnapshot = () => {
 
 const getAdyenCheckoutFactory = () => resolveFactoryFromCandidate(adyenState.checkoutFactory)
   || getFactoryFromGlobalSearch();
+
+const getAdyenDropinConstructor = () => {
+  if (typeof window.AdyenWeb?.Dropin === 'function') {
+    return window.AdyenWeb.Dropin;
+  }
+
+  if (typeof globalThis.AdyenWeb?.Dropin === 'function') {
+    return globalThis.AdyenWeb.Dropin;
+  }
+
+  return null;
+};
 
 const createCheckoutInstance = async (factory, config) => {
   if (typeof factory !== 'function') {
@@ -128,6 +142,14 @@ const createCheckoutInstance = async (factory, config) => {
 const mountDropin = (checkout, mountNode) => {
   if (checkout && typeof checkout.create === 'function') {
     checkout.create('dropin', {
+      showPayButton: true,
+    }).mount(mountNode);
+    return true;
+  }
+
+  const Dropin = getAdyenDropinConstructor();
+  if (Dropin && checkout) {
+    new Dropin(checkout, {
       showPayButton: true,
     }).mount(mountNode);
     return true;
@@ -452,12 +474,30 @@ export const startAdyenCheckoutFlow = async ({ cartId, onPaymentComplete }) => {
         sessionData: sessionResponse.sessionData,
       },
       onPaymentCompleted: async (result) => {
-        if (result?.resultCode) {
-          modal.close();
-        }
+        let completionResult = { ok: true };
 
         if (typeof onPaymentComplete === 'function') {
-          await onPaymentComplete(result);
+          try {
+            const callbackResult = await onPaymentComplete(result);
+            if (callbackResult && typeof callbackResult === 'object') {
+              completionResult = callbackResult;
+            }
+          } catch (error) {
+            completionResult = {
+              ok: false,
+              message: normalizeErrorMessage(error, 'Payment was authorized, but order creation failed.'),
+            };
+          }
+        }
+
+        if (completionResult?.ok === false) {
+          console.warn('Adyen authorization succeeded but order placement failed:', completionResult);
+          window.alert(completionResult?.message || 'Payment was authorized, but order creation failed. Please contact support with your payment reference.');
+          return;
+        }
+
+        if (result?.resultCode) {
+          modal.close();
         }
       },
       onError: (error) => {
