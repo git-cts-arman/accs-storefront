@@ -4,6 +4,11 @@
       "commerce-core-endpoint": "https://www.aemshop.net/graphql",
       "commerce-endpoint": "https://www.aemshop.net/cs-graphql",
       "commerce-assets-enabled": true,
+      "adyen-payment-methods-endpoint": "https://19211-paymentgateway-stage.adobeioruntime.net/api/v1/web/adyen/payment-methods",
+      "adyen-checkout-session-endpoint": "https://19211-paymentgateway-stage.adobeioruntime.net/api/v1/web/adyen/checkout-session",
+      "adyen-country-code": "NL",
+      "adyen-shopper-locale": "en-US",
+      "adyen-environment": "test",
       "headers": {
         "all": {
           "Store": "default"

@@ -1,0 +1,15 @@
+{
+  "definitions": [{
+    "title": "Commerce Checkout Adyen",
+    "id": "commerce-checkout-adyen",
+    "model": "commerce-checkout-adyen",
+    "plugins": {
+      "da": {
+        "rows": 1,
+        "columns": 2
+      }
+    }
+  }],
+  "models": [],
+  "filters": []
+}
