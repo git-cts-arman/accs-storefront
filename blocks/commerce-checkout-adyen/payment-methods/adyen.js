@@ -54,10 +54,9 @@ const resolveFactoryFromCandidate = (candidate) => {
   if (typeof candidate === 'object') {
     return resolveFactoryFromCandidate(candidate.AdyenCheckout)
       || resolveFactoryFromCandidate(candidate.default)
-      || resolveFactoryFromCandidate(candidate.checkout)
-      || resolveFactoryFromCandidate(candidate.Checkout)
       || resolveFactoryFromCandidate(candidate.default?.AdyenCheckout)
-      || resolveFactoryFromCandidate(candidate.default?.default);
+      || resolveFactoryFromCandidate(candidate.default?.default)
+      || null;
   }
 
   return null;
@@ -68,11 +67,9 @@ const getFactoryFromGlobalSearch = () => {
     globalThis.AdyenCheckout,
     globalThis.adyenCheckout,
     globalThis.AdyenWeb,
-    globalThis.Adyen,
     window.AdyenCheckout,
     window.adyenCheckout,
     window.AdyenWeb,
-    window.Adyen,
   ];
 
   for (const candidate of candidates) {
@@ -83,6 +80,29 @@ const getFactoryFromGlobalSearch = () => {
   }
 
   return null;
+};
+
+const getCspNonce = () => {
+  const nonceScript = document.querySelector('script[nonce]');
+  if (!nonceScript) {
+    return null;
+  }
+
+  return nonceScript.getAttribute('nonce') || null;
+};
+
+const globalDebugSnapshot = () => {
+  const snapshot = {
+    hasWindowAdyenCheckout: typeof window.AdyenCheckout,
+    hasWindowadyenCheckout: typeof window.adyenCheckout,
+    hasWindowAdyenWeb: typeof window.AdyenWeb,
+  };
+
+  if (window.AdyenWeb && typeof window.AdyenWeb === 'object') {
+    snapshot.adyenWebKeys = Object.keys(window.AdyenWeb).slice(0, 12);
+  }
+
+  return JSON.stringify(snapshot);
 };
 
 const getAdyenCheckoutFactory = () => resolveFactoryFromCandidate(adyenState.checkoutFactory)
@@ -103,6 +123,22 @@ const createCheckoutInstance = async (factory, config) => {
 
     throw error;
   }
+};
+
+const mountDropin = (checkout, mountNode) => {
+  if (checkout && typeof checkout.create === 'function') {
+    checkout.create('dropin', {
+      showPayButton: true,
+    }).mount(mountNode);
+    return true;
+  }
+
+  if (checkout && typeof checkout.mount === 'function') {
+    checkout.mount(mountNode);
+    return true;
+  }
+
+  return false;
 };
 
 const toMinorAmount = (value) => {
@@ -196,17 +232,31 @@ const ensureAdyenScript = () => {
     scriptEl.src = 'https://checkoutshopper-test.adyen.com/checkoutshopper/sdk/6.15.0/adyen.js';
     scriptEl.async = true;
     scriptEl.crossOrigin = 'anonymous';
+    const nonce = getCspNonce();
+    if (nonce) {
+      scriptEl.setAttribute('nonce', nonce);
+    }
 
     scriptEl.onload = () => {
-      const checkoutFactory = getAdyenCheckoutFactory();
-      if (checkoutFactory) {
-        adyenState.checkoutFactory = checkoutFactory;
-      }
-      resolve();
+      // Some SDK builds attach global exports on the next task.
+      setTimeout(() => {
+        const checkoutFactory = getAdyenCheckoutFactory();
+        if (checkoutFactory) {
+          adyenState.checkoutFactory = checkoutFactory;
+          resolve();
+          return;
+        }
+
+        const error = new Error(`Adyen SDK script loaded but no checkout factory was exported. Globals: ${globalDebugSnapshot()}`);
+        adyenState.loaderErrors.push(error);
+        adyenState.scriptPromise = null;
+        reject(error);
+      }, 0);
     };
     scriptEl.onerror = () => {
       const error = new Error('Failed to load Adyen SDK script.');
       adyenState.loaderErrors.push(error);
+      adyenState.scriptPromise = null;
       reject(error);
     };
 
@@ -214,35 +264,6 @@ const ensureAdyenScript = () => {
   });
 
   return adyenState.scriptPromise;
-};
-
-const ensureAdyenEsm = async () => {
-  if (getAdyenCheckoutFactory()) {
-    return;
-  }
-
-  const urls = [
-    'https://checkoutshopper-test.adyen.com/checkoutshopper/sdk/6.15.0/adyen.js',
-    'https://cdn.jsdelivr.net/npm/@adyen/adyen-web@6.15.0/dist/es/index.js',
-    'https://esm.sh/@adyen/adyen-web@6.15.0',
-  ];
-
-  for (const url of urls) {
-    try {
-      const mod = await import(url);
-      const resolvedFactory = resolveFactoryFromCandidate(mod)
-        || resolveFactoryFromCandidate(mod?.default)
-        || resolveFactoryFromCandidate(mod?.AdyenCheckout)
-        || resolveFactoryFromCandidate(mod?.Checkout);
-
-      if (resolvedFactory) {
-        adyenState.checkoutFactory = resolvedFactory;
-        return;
-      }
-    } catch (error) {
-      adyenState.loaderErrors.push(error);
-    }
-  }
 };
 
 const normalizeEnvironment = (environment) => {
@@ -383,10 +404,6 @@ export const startAdyenCheckoutFlow = async ({ cartId, onPaymentComplete }) => {
       console.warn('Adyen script load failed:', error);
     }
 
-    if (!getAdyenCheckoutFactory()) {
-      await ensureAdyenEsm();
-    }
-
     const config = await getAdyenConfig();
 
     if (!adyenState.paymentMethodsResponse) {
@@ -418,7 +435,7 @@ export const startAdyenCheckoutFlow = async ({ cartId, onPaymentComplete }) => {
         .join(' | ');
       return {
         ok: false,
-        message: `Unable to load Adyen SDK. ${loaderErrors || 'No loader details available.'}`,
+        message: `Unable to load Adyen SDK global factory (AdyenCheckout). ${loaderErrors || 'No loader details available.'}`,
       };
     }
 
@@ -448,9 +465,12 @@ export const startAdyenCheckoutFlow = async ({ cartId, onPaymentComplete }) => {
       },
     });
 
-    checkout.create('dropin', {
-      showPayButton: true,
-    }).mount(modal.mountNode);
+    if (!mountDropin(checkout, modal.mountNode)) {
+      return {
+        ok: false,
+        message: 'Adyen checkout initialized with an unsupported SDK shape. Please verify Adyen Web SDK version and export format.',
+      };
+    }
 
     return { ok: true };
   } catch (error) {
