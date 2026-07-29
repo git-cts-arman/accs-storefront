@@ -367,6 +367,9 @@ export const renderPaymentMethods = async (container, creditCardFormRef) => rend
         [PaymentMethodCode.CREDIT_CARD]: {
           ...getAdyenFallbackSlot(),
         },
+        oope_stripe: {
+          ...getAdyenFallbackSlot(),
+        },
         [PaymentMethodCode.SMART_BUTTONS]: {
           enabled: false,
         },

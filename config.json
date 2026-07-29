@@ -1,8 +1,8 @@
 {
   "public": {
     "default": {
-      "commerce-core-endpoint": "https://www.aemshop.net/graphql",
-      "commerce-endpoint": "https://www.aemshop.net/cs-graphql",
+      "commerce-core-endpoint": "https://na1-sandbox.api.commerce.adobe.com/4wQSG2tXazwRKoDE5vahEA/graphql",
+      "commerce-endpoint": "https://na1-sandbox.api.commerce.adobe.com/4wQSG2tXazwRKoDE5vahEA/graphql",
       "commerce-assets-enabled": true,
       "adyen-payment-methods-endpoint": "https://19211-paymentgateway-stage.adobeioruntime.net/api/v1/web/adyen/payment-methods",
       "adyen-checkout-session-endpoint": "https://19211-paymentgateway-stage.adobeioruntime.net/api/v1/web/adyen/checkout-session",
@@ -17,31 +17,30 @@
         "cs": {
           "Magento-Store-Code": "main_website_store",
           "Magento-Store-View-Code": "default",
-          "Magento-Website-Code": "base",
-          "x-api-key": "4dfa19c9fe6f4cccade55cc5b3da94f7",
-          "Magento-Environment-Id": "f38a0de0-764b-41fa-bd2c-5bc2f3c7b39a"
+          "Magento-Website-Code": "base"
         }
       },
+      "commerce-b2b-enabled": false,
+      "commerce-companies-enabled": false,
+      "adobe-commerce-optimizer": false,
       "analytics": {
-        "aep-ims-org-id": null,
-        "aep-datastream-id": null,
         "base-currency-code": "USD",
         "environment": "Testing",
-        "environment-id": "f38a0de0-764b-41fa-bd2c-5bc2f3c7b39a",
+        "environment-id": "4wQSG2tXazwRKoDE5vahEA",
         "store-code": "main_website_store",
-        "store-id": 1,
-        "store-name": "Main Website Store",
-        "store-url": "https://www.aemshop.net",
+        "store-id": "main_website_store",
+        "store-name": "Default Store View",
+        "store-url": "https://coresaas-subgraph-external:8000/4wQSG2tXazwRKoDE5vahEA/",
         "store-view-code": "default",
-        "store-view-id": 1,
+        "store-view-id": "default",
         "store-view-name": "Default Store View",
         "website-code": "base",
-        "website-id": 1,
+        "website-id": "base",
         "website-name": "Main Website"
       },
       "plugins": {
         "picker": {
-          "rootCategory": "YOUR_ROOT_CATEGORY_ID"
+          "rootCategory": "2"
         }
       }
     }

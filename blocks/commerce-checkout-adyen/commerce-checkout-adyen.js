@@ -92,45 +92,10 @@ function redirectToCartIfEmpty(cartData) {
   }
 }
 
-async function finalizeMagentoOrderAfterAdyen(cartId) {
-  const configuredMethod = (await getConfigValue('adyen-order-placement-method') || '').trim();
-  const fallbackMethods = [
-    configuredMethod,
-    'checkmo',
-    'banktransfer',
-    'banktransferpayment',
-  ].filter(Boolean);
-
-  let methodSet = false;
-  let lastSetMethodError;
-
-  for (const methodCode of fallbackMethods) {
-    try {
-      await checkoutApi.setPaymentMethod({ code: methodCode });
-      methodSet = true;
-      break;
-    } catch (error) {
-      lastSetMethodError = error;
-    }
-  }
-
-  if (!methodSet) {
-    return {
-      ok: false,
-      message: `Payment was authorized, but checkout could not map an order placement method. ${String(lastSetMethodError?.message || '')}`.trim(),
-    };
-  }
-
-  try {
-    await orderApi.placeOrder(cartId);
-    return { ok: true };
-  } catch (error) {
-    return {
-      ok: false,
-      message: `Payment was authorized, but checkout could not create the order. ${String(error?.message || '')}`.trim(),
-    };
-  }
-}
+// Note: placeOrder is NOT called from the frontend for Adyen payments.
+// The Adyen Magento module blocks placeOrder until it receives payment state data
+// which is not available synchronously after onPaymentCompleted.
+// Instead, the adyen/webhook App Builder action handles order invoicing async.
 
 export default async function decorate(block) {
   setMetaTags('Checkout');
@@ -194,23 +159,52 @@ export default async function decorate(block) {
     await displayOverlaySpinner(loaderRef, $loader);
     try {
       if (isAdyenPaymentCode(code)) {
+        // Step 1: Set a non-Adyen payment method on the cart so Magento will
+        // accept placeOrder without requiring Adyen-specific payment state.
+        const orderPlacementMethod = await getConfigValue('adyen-order-placement-method') || 'checkmo';
+        try {
+          await checkoutApi.setPaymentMethod({ code: orderPlacementMethod });
+        } catch (error) {
+          window.alert(`Unable to set payment method '${orderPlacementMethod}'. ${String(error?.message || '')}`.trim());
+          return;
+        }
+
+        // Step 2: Place the Magento order BEFORE showing the Drop-in.
+        // The order number becomes the Adyen reference so the webhook can
+        // match the payment notification back to the correct Magento order.
+        let orderData;
+        try {
+          orderData = await orderApi.placeOrder(cartId);
+          if (!orderData?.number) throw new Error('Order number was not returned by Magento.');
+        } catch (error) {
+          window.alert(`Unable to create order. ${String(error?.message || '')}`.trim());
+          return;
+        }
+
+        // Step 3: Show Adyen Drop-in — customer pays.
+        // reference = Magento order_number so the App Builder webhook can invoice it.
+        adyenPaymentInProgress = true;
+        deferredSuccessData = null;
+
         const adyenResult = await startAdyenCheckoutFlow({
           cartId,
-          code,
-          onPaymentComplete: async (paymentResult) => {
-            const resultCode = paymentResult?.resultCode;
-            if (resultCode && resultCode !== 'Authorised') {
-              return {
-                ok: false,
-                message: 'Payment did not complete successfully. Please try again.',
-              };
+          orderNumber: orderData.number,
+          onPaymentCompleted: async (result) => {
+            adyenPaymentInProgress = false;
+            const { resultCode } = result || {};
+            if (resultCode === 'Authorised' || resultCode === 'Pending') {
+              await showOrderSuccess(deferredSuccessData || orderData);
+            } else {
+              const msg = resultCode
+                ? `Payment ${resultCode}. Please try a different payment method.`
+                : 'Payment did not complete. Please try again.';
+              window.alert(msg);
             }
-
-            return finalizeMagentoOrderAfterAdyen(cartId);
           },
         });
 
         if (!adyenResult?.ok) {
+          adyenPaymentInProgress = false;
           window.alert(adyenResult?.message || 'Unable to initialize Adyen payment. Please try again.');
         }
 
@@ -371,16 +365,27 @@ export default async function decorate(block) {
     $billingForm.style.display = isBillToShipping ? 'none' : 'block';
   }
 
-  async function handleOrderPlaced(orderData) {
-    // Clear address form data
+  // When an Adyen payment is in progress, placeOrder fires order/placed but we must
+  // not show the success page until the Adyen modal payment is complete.
+  let deferredSuccessData = null;
+  let adyenPaymentInProgress = false;
+
+  async function showOrderSuccess(orderData) {
     sessionStorage.removeItem(SHIPPING_ADDRESS_DATA_KEY);
     sessionStorage.removeItem(BILLING_ADDRESS_DATA_KEY);
-
     const url = buildOrderDetailsUrl(orderData);
-
     window.history.pushState({}, '', url);
 
     await renderCheckoutSuccess(block, { orderData });
+  }
+
+  async function handleOrderPlaced(orderData) {
+    if (adyenPaymentInProgress) {
+      // Adyen modal is open — defer until payment completes.
+      deferredSuccessData = orderData;
+      return;
+    }
+    await showOrderSuccess(orderData);
   }
 
   events.on('authenticated', handleAuthenticated);

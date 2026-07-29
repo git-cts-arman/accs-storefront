@@ -23,6 +23,9 @@ const ADYEN_METHOD_CODES = Object.freeze([
 
 const ADYEN_FALLBACK_TRIGGER_CODES = Object.freeze([
   'payment_services_paypal_hosted_fields',
+  'checkmo',
+  'cashondelivery',
+  'oope_stripe',
 ]);
 
 const adyenState = {
@@ -353,30 +356,17 @@ const fetchPaymentMethods = async () => {
   return response;
 };
 
-const buildCheckoutSessionPayload = ({ cartId }) => {
+const buildCheckoutSessionPayload = ({ cartId, orderNumber }) => {
   const payload = getCheckoutPayload();
-  const timestamp = Date.now();
-  const browserInfo = {
-    userAgent: navigator.userAgent,
-    acceptHeader: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    language: navigator.language,
-    colorDepth: Number(screen.colorDepth) || 24,
-    screenHeight: Number(screen.height) || 0,
-    screenWidth: Number(screen.width) || 0,
-    timeZoneOffset: new Date().getTimezoneOffset(),
-    javaEnabled: typeof navigator.javaEnabled === 'function' ? navigator.javaEnabled() : false,
-  };
 
   return {
     amount: payload.amount,
-    reference: `cart-${cartId || 'guest'}-${timestamp}`,
-    returnUrl: `${window.location.origin}/checkout/result`,
-    origin: window.location.origin,
+    reference: orderNumber || `cart-${cartId || 'guest'}-${Date.now()}`,
+    returnUrl: `${window.location.origin}/checkout/result?order=${encodeURIComponent(orderNumber || '')}`,
     countryCode: payload.countryCode,
     channel: 'Web',
     shopperLocale: payload.shopperLocale,
     shopperInteraction: 'Ecommerce',
-    browserInfo,
   };
 };
 
@@ -407,18 +397,20 @@ export const isAdyenPaymentCode = (code) => (
 
 export const getAdyenFallbackSlot = () => ({
   displayLabel: false,
+  autoSync: false,
   render: (ctx) => renderAdyenMethodPlaceholder(ctx),
 });
 
 export const createAdyenPaymentMethodSlots = () => ADYEN_METHOD_CODES.reduce((slots, code) => {
   slots[code] = {
+    autoSync: false,
     render: (ctx) => renderAdyenMethodPlaceholder(ctx),
   };
 
   return slots;
 }, {});
 
-export const startAdyenCheckoutFlow = async ({ cartId, onPaymentComplete }) => {
+export const startAdyenCheckoutFlow = async ({ cartId, orderNumber, onPaymentCompleted: onComplete }) => {
   try {
     try {
       await ensureAdyenScript();
@@ -434,7 +426,7 @@ export const startAdyenCheckoutFlow = async ({ cartId, onPaymentComplete }) => {
 
     const sessionResponse = await postJson(
       config.checkoutSessionEndpoint,
-      buildCheckoutSessionPayload({ cartId }),
+      buildCheckoutSessionPayload({ cartId, orderNumber }),
     );
 
     const environment = normalizeEnvironment(
@@ -474,30 +466,18 @@ export const startAdyenCheckoutFlow = async ({ cartId, onPaymentComplete }) => {
         sessionData: sessionResponse.sessionData,
       },
       onPaymentCompleted: async (result) => {
-        let completionResult = { ok: true };
-
-        if (typeof onPaymentComplete === 'function') {
-          try {
-            const callbackResult = await onPaymentComplete(result);
-            if (callbackResult && typeof callbackResult === 'object') {
-              completionResult = callbackResult;
-            }
-          } catch (error) {
-            completionResult = {
-              ok: false,
-              message: normalizeErrorMessage(error, 'Payment was authorized, but order creation failed.'),
-            };
+        modal.close();
+        if (onComplete) {
+          await onComplete(result);
+        } else {
+          // Fallback: no callback provided, nothing more to do.
+          const { resultCode } = result || {};
+          if (resultCode !== 'Authorised' && resultCode !== 'Pending') {
+            const message = resultCode
+              ? `Payment ${resultCode}. Please try again.`
+              : 'Payment did not complete. Please try again.';
+            window.alert(message);
           }
-        }
-
-        if (completionResult?.ok === false) {
-          console.warn('Adyen authorization succeeded but order placement failed:', completionResult);
-          window.alert(completionResult?.message || 'Payment was authorized, but order creation failed. Please contact support with your payment reference.');
-          return;
-        }
-
-        if (result?.resultCode) {
-          modal.close();
         }
       },
       onError: (error) => {
